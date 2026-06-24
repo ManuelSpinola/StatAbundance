@@ -18,6 +18,7 @@ Imports:
     bslib,
     bsicons,
     shinyjs,
+    pkgload,
     ggplot2,
     dplyr,
     DT,
