@@ -7,39 +7,30 @@
 # Ecosistema: unmarked + tidyverse + ggplot2
 # ============================================================
 
-# ── Datos de ejemplo ──────────────────────────────────────
+# ── Loaders de datasets desde inst/app/data/ ──────────────
 
-.sim_aves <- function() {
-  set.seed(42)
-  M  <- 100  # sitios
-  J  <- 4    # ocasiones
-  bosque   <- rnorm(M)
-  elev     <- rnorm(M)
-  lambda   <- exp(1.2 + 0.8 * bosque - 0.3 * elev)
-  N        <- rpois(M, lambda)
-  esfuerzo <- matrix(rnorm(M * J), M, J)
-  p_mat    <- plogis(-0.5 + 0.4 * esfuerzo)
-  y        <- matrix(rbinom(M * J, N, p_mat), M, J)
-  colnames(y) <- paste0("y.", 1:J)
-  obs_covs <- lapply(1:J, function(j) esfuerzo[, j])
-  names(obs_covs) <- paste0("esfuerzo.", 1:J)
-  df <- data.frame(y, bosque = bosque, elev = elev)
-  list(df = df, obs_covs_df = as.data.frame(obs_covs))
+.cargar_aves <- function() {
+  df <- readRDS(app_sys("app/data/datos_aves.rds"))
+  cols_obs <- grep("^esfuerzo\\.", names(df), value = TRUE)
+  obs_covs_df <- df[, cols_obs, drop = FALSE]
+  df_clean    <- df[, setdiff(names(df), cols_obs), drop = FALSE]
+  list(df = df_clean, obs_covs_df = obs_covs_df)
 }
 
-.sim_mamiferos <- function() {
-  set.seed(99)
-  M  <- 80
-  J  <- 5
-  cobertura <- rnorm(M)
-  distancia <- rnorm(M)
-  lambda    <- exp(0.9 + 0.6 * cobertura - 0.5 * distancia)
-  N         <- rpois(M, lambda)
-  p_vec     <- plogis(-1.0)
-  y         <- matrix(rbinom(M * J, N, p_vec), M, J)
-  colnames(y) <- paste0("y.", 1:J)
-  df <- data.frame(y, cobertura = cobertura, distancia = distancia)
-  list(df = df, obs_covs_df = NULL)
+.cargar_ranas <- function() {
+  df <- readRDS(app_sys("app/data/datos_ranas.rds"))
+  cols_obs <- grep("^temp\\.", names(df), value = TRUE)
+  obs_covs_df <- df[, cols_obs, drop = FALSE]
+  df_clean    <- df[, setdiff(names(df), cols_obs), drop = FALSE]
+  list(df = df_clean, obs_covs_df = obs_covs_df)
+}
+
+.cargar_mallard <- function() {
+  df <- readRDS(app_sys("app/data/datos_mallard.rds"))
+  cols_obs <- grep("^(date|ivel)\\.", names(df), value = TRUE)
+  obs_covs_df <- df[, cols_obs, drop = FALSE]
+  df_clean    <- df[, setdiff(names(df), cols_obs), drop = FALSE]
+  list(df = df_clean, obs_covs_df = obs_covs_df)
 }
 
 # ── UI ────────────────────────────────────────────────────
@@ -413,57 +404,147 @@ mod_abund_unmarked_ui <- function(id) {
         title = tagList(bs_icon("table", class = "me-1"), "Los datos"),
         card_body(
           navset_tab(
+
+            # ── Sub-tab 1: Cargar datos ────────────────────
             nav_panel(
               title = tagList(bs_icon("upload", class = "me-1"), "Cargar datos"),
               div(class = "mt-3",
+                layout_columns(
+                  col_widths = c(6, 6),
 
-                  uiOutput(ns("desc_dataset_ui")),
-
-                  p(class = "small text-muted",
-                    "Selecciona un dataset de ejemplo o carga tu propio archivo CSV/XLSX. ",
-                    "Columnas de conteo: ", tags$code("y.1, y.2, \u2026 y.J"), "."
-                  ),
-                  radioButtons(
-                    ns("fuente_datos"),
-                    label = tagList(bs_icon("database", class = "me-1"),
-                                    "Fuente de datos:"),
-                    choices = c(
-                      "Aves \u2014 puntos de conteo (simulado)"        = "aves",
-                      "Mam\u00edferos \u2014 transectos (simulado)"   = "mamiferos",
-                      "Cargar mis propios datos (CSV / XLSX)"          = "propio"
+                  # ── Columna izquierda: datasets de ejemplo ──
+                  div(
+                    tags$b(
+                      bs_icon("database", class = "me-1"),
+                      "Datasets de ejemplo"
                     ),
-                    selected = "aves"
+                    p(class = "small text-muted mt-1 mb-3",
+                      "Selecciona un dataset para explorar la app ",
+                      "sin necesidad de tus propios datos."
+                    ),
+                    selectInput(
+                      ns("fuente_datos"),
+                      label    = NULL,
+                      choices  = c(
+                        "Aves \u2014 puntos de conteo (simulado)"                    = "aves",
+                        "Ranas \u2014 transectos nocturnos (simulado)"               = "ranas",
+                        "Mallard \u2014 patos (unmarked \u00b7 K\u00e9ry et al. 2005)" = "mallard"
+                      ),
+                      selected = "aves"
+                    ),
+                    # Descripción dinámica del dataset seleccionado
+                    uiOutput(ns("desc_dataset_ui"))
                   ),
-                  conditionalPanel(
-                    condition = paste0("input['", ns("fuente_datos"), "'] == 'propio'"),
+
+                  # ── Columna derecha: datos propios ──────────
+                  div(
+                    tags$b(
+                      bs_icon("file-earmark-arrow-up", class = "me-1"),
+                      "Mis propios datos"
+                    ),
+                    p(class = "small text-muted mt-1 mb-3",
+                      "Carga un archivo CSV o XLSX con tus propios conteos."
+                    ),
                     fileInput(
                       ns("archivo_usuario"),
-                      label    = tagList(
-                        bs_icon("file-earmark-arrow-up", class = "me-1"),
-                        "Seleccionar archivo:"),
-                      accept   = c(".csv", ".xlsx"),
-                      buttonLabel = "Examinar\u2026",
+                      label       = NULL,
+                      accept      = c(".csv", ".xlsx"),
+                      buttonLabel = tagList(
+                        bs_icon("folder2-open", class = "me-1"), "Examinar\u2026"),
                       placeholder = "Sin archivo seleccionado"
                     ),
                     div(
-                      class = "alert alert-warning small py-2 px-3 mb-3",
-                      bs_icon("exclamation-triangle", class = "me-1"),
-                      tags$strong("Formato requerido:"),
+                      class = "p-3",
+                      style = paste0("background:", colores$fondo,
+                                     "; border-left: 4px solid ", colores$primario,
+                                     "; border-radius: 0 6px 6px 0;"),
+                      tags$b(bs_icon("info-circle", class = "me-1",
+                                     style = paste0("color:", colores$primario)),
+                             "Formato requerido"),
+                      p(class = "small text-muted mt-1 mb-2",
+                        "Cada fila representa un sitio."),
                       tags$ul(
-                        class = "mb-0 mt-1",
-                        tags$li("Filas = sitios; columnas de conteo: ",
-                                tags$code("y.1, y.2, \u2026 y.J"),
-                                " (valores enteros no negativos / NA)"),
-                        tags$li("Covariables de sitio: columnas adicionales con nombre libre ",
-                                "(ej. ", tags$code("bosque"), ", ", tags$code("elev"), ")"),
-                        tags$li("Covariables de observaci\u00f3n: prefijo libre m\u00e1s sufijo num\u00e9rico, ",
-                                "ej. ", tags$code("esfuerzo.1, esfuerzo.2, \u2026 esfuerzo.J"))
+                        class = "small text-muted mb-3",
+                        style = "list-style: none; padding-left: 0;",
+                        tags$li(class = "mb-2",
+                          bs_icon("arrow-right", class = "me-1",
+                                  style = paste0("color:", colores$secundario)),
+                          tags$strong("Conteos:"), " columnas ",
+                          tags$code("y.1"), ", ", tags$code("y.2"), ", \u2026 ",
+                          tags$code("y.J"),
+                          " \u2014 valores enteros \u2265 0. ",
+                          "Usa ", tags$code("NA"),
+                          " cuando el sitio no fue muestreado en esa ocasi\u00f3n."
+                        ),
+                        tags$li(class = "mb-2",
+                          bs_icon("arrow-right", class = "me-1",
+                                  style = paste0("color:", colores$secundario)),
+                          tags$strong("Covariables de sitio:"),
+                          " columnas adicionales con nombre libre, ej. ",
+                          tags$code("bosque"), ", ", tags$code("elev"), "."
+                        ),
+                        tags$li(class = "mb-0",
+                          bs_icon("arrow-right", class = "me-1",
+                                  style = paste0("color:", colores$secundario)),
+                          tags$strong("Covariables de observaci\u00f3n"),
+                          " (opcionales): prefijo + n\u00famero, ej. ",
+                          tags$code("esfuerzo.1"), ", ", tags$code("esfuerzo.2"),
+                          "\u2026 El prefijo (",
+                          tags$code("esfuerzo"),
+                          ") se usa en la f\u00f3rmula."
+                        )
+                      ),
+                      # Tabla de ejemplo
+                      tags$b(class = "small",
+                             bs_icon("table", class = "me-1",
+                                     style = paste0("color:", colores$primario)),
+                             "Ejemplo de estructura:"),
+                      div(
+                        class = "mt-2",
+                        style = "overflow-x: auto;",
+                        tags$table(
+                          class = "table table-sm table-bordered small mb-0",
+                          style = "background:#ffffff; font-size: 0.78rem;",
+                          tags$thead(
+                            style = paste0("background:", colores$primario,
+                                           "; color:#ffffff;"),
+                            tags$tr(
+                              tags$th("y.1"), tags$th("y.2"), tags$th("y.3"),
+                              tags$th("bosque"), tags$th("elev"),
+                              tags$th("esfuerzo.1"), tags$th("esfuerzo.2"),
+                              tags$th("esfuerzo.3")
+                            )
+                          ),
+                          tags$tbody(
+                            tags$tr(
+                              tags$td("3"), tags$td("5"), tags$td("2"),
+                              tags$td("1.2"), tags$td("340"),
+                              tags$td("0.8"), tags$td("1.1"), tags$td("0.9")
+                            ),
+                            tags$tr(
+                              style = paste0("background:", colores$fondo),
+                              tags$td("0"), tags$td("1"), tags$td("0"),
+                              tags$td("-0.3"), tags$td("210"),
+                              tags$td("1.0"),
+                              tags$td(style = "color:#A3ACB9; font-style:italic;", "NA"),
+                              tags$td("0.7")
+                            ),
+                            tags$tr(
+                              tags$td("8"), tags$td("6"),
+                              tags$td(style = "color:#A3ACB9; font-style:italic;", "NA"),
+                              tags$td("2.1"), tags$td("180"),
+                              tags$td("0.6"), tags$td("0.9"), tags$td("1.2")
+                            )
+                          )
+                        )
                       )
                     )
-                  ),
-                  uiOutput(ns("sel_cov_obs"))
+                  )
+                )
               )
             ),
+
+            # ── Sub-tab 2: Vista previa ────────────────────
             nav_panel(
               title = tagList(bs_icon("eye", class = "me-1"), "Vista previa"),
               div(class = "mt-3",
@@ -471,11 +552,14 @@ mod_abund_unmarked_ui <- function(id) {
                   DTOutput(ns("tabla_preview"))
               )
             ),
+
+            # ── Sub-tab 3: Conteos ─────────────────────────
             nav_panel(
               title = tagList(bs_icon("grid", class = "me-1"), "Conteos"),
               div(class = "mt-3",
                   p(class = "small text-muted",
-                    "Conteo de individuos por sitio y ocasi\u00f3n (NA = sin esfuerzo)."),
+                    "N\u00famero de individuos detectados por sitio y ocasi\u00f3n. ",
+                    "NA = sitio no muestreado en esa ocasi\u00f3n."),
                   DTOutput(ns("tabla_conteos")),
                   div(class = "mt-3",
                       layout_columns(
@@ -484,23 +568,18 @@ mod_abund_unmarked_ui <- function(id) {
                           card_header(bs_icon("geo-alt", class = "me-1"), "Sitios"),
                           card_body(
                             p(class = "text-center mb-0",
-                              tags$span(
-                                style = "font-size:1.8rem; font-weight:700;
-                                         color:#1170AA;",
-                                uiOutput(ns("n_sitios_txt"))
-                              ))
+                              tags$span(style = "font-size:1.8rem; font-weight:700;
+                                                 color:#1170AA;",
+                                        uiOutput(ns("n_sitios_txt"))))
                           )
                         ),
                         card(
-                          card_header(bs_icon("calendar3", class = "me-1"),
-                                      "Ocasiones"),
+                          card_header(bs_icon("calendar3", class = "me-1"), "Ocasiones"),
                           card_body(
                             p(class = "text-center mb-0",
-                              tags$span(
-                                style = "font-size:1.8rem; font-weight:700;
-                                         color:#FC7D0B;",
-                                uiOutput(ns("n_ocasiones_txt"))
-                              ))
+                              tags$span(style = "font-size:1.8rem; font-weight:700;
+                                                 color:#FC7D0B;",
+                                        uiOutput(ns("n_ocasiones_txt"))))
                           )
                         ),
                         card(
@@ -508,11 +587,9 @@ mod_abund_unmarked_ui <- function(id) {
                                       "Conteo m\u00e1ximo"),
                           card_body(
                             p(class = "text-center mb-0",
-                              tags$span(
-                                style = "font-size:1.8rem; font-weight:700;
-                                         color:#5FA2CE;",
-                                uiOutput(ns("max_count_txt"))
-                              ))
+                              tags$span(style = "font-size:1.8rem; font-weight:700;
+                                                 color:#5FA2CE;",
+                                        uiOutput(ns("max_count_txt"))))
                           )
                         )
                       )
@@ -702,20 +779,22 @@ mod_abund_unmarked_server <- function(id) {
 
     # ── Datos reactivos ───────────────────────────────────
     datos_raw <- reactive({
-      switch(input$fuente_datos,
-        "aves"     = .sim_aves(),
-        "mamiferos" = .sim_mamiferos(),
-        "propio"   = {
-          req(input$archivo_usuario)
-          ext <- tools::file_ext(input$archivo_usuario$name)
-          df <- if (ext == "xlsx") {
-            readxl::read_excel(input$archivo_usuario$datapath)
-          } else {
-            readr::read_csv(input$archivo_usuario$datapath,
-                            show_col_types = FALSE)
-          }
-          list(df = as.data.frame(df), obs_covs_df = NULL)
+      # Si el usuario cargó un archivo, tiene prioridad
+      if (!is.null(input$archivo_usuario)) {
+        ext <- tools::file_ext(input$archivo_usuario$name)
+        df <- if (ext == "xlsx") {
+          readxl::read_excel(input$archivo_usuario$datapath)
+        } else {
+          readr::read_csv(input$archivo_usuario$datapath,
+                          show_col_types = FALSE)
         }
+        return(list(df = as.data.frame(df), obs_covs_df = NULL))
+      }
+      # Si no, usa el dataset de ejemplo seleccionado
+      switch(input$fuente_datos,
+        "aves"    = .cargar_aves(),
+        "ranas"   = .cargar_ranas(),
+        "mallard" = .cargar_mallard()
       )
     })
 
@@ -756,35 +835,73 @@ mod_abund_unmarked_server <- function(id) {
     output$desc_dataset_ui <- renderUI({
       desc <- switch(input$fuente_datos,
         "aves" = list(
-          titulo = "Aves \u2014 puntos de conteo (simulado)",
-          texto  = paste0(
-            "100 sitios \u00b7 4 ocasiones de muestreo. ",
-            "Covariables de sitio: ", tags$code("bosque"), ", ", tags$code("elev"), ". ",
-            "Covariable de observaci\u00f3n: ", tags$code("esfuerzo"),
-            " (intensidad de muestreo por ocasi\u00f3n). ",
-            "Distribuci\u00f3n real: Poisson con \u03bb ~ exp(1.2 + 0.8\u00b7bosque \u2212 0.3\u00b7elev)."
+          icono  = "binoculars",
+          titulo = "Aves \u2014 puntos de conteo",
+          items  = list(
+            list(icon = "grid-3x3",     txt = "100 sitios \u00b7 4 ocasiones"),
+            list(icon = "geo-alt-fill", txt = tagList("Covariables de sitio: ",
+                                                       tags$code("bosque"), ", ",
+                                                       tags$code("elev"))),
+            list(icon = "eye-fill",     txt = tagList("Covariable de observaci\u00f3n: ",
+                                                       tags$code("esfuerzo"))),
+            list(icon = "calculator",   txt = tagList("Modelo generador: Poisson con \u03bb ~ ",
+                                                       tags$code("exp(1.2 + 0.8\u00b7bosque \u2212 0.3\u00b7elev)")))
           )
         ),
-        "mamiferos" = list(
-          titulo = "Mam\u00edferos \u2014 transectos (simulado)",
-          texto  = paste0(
-            "80 sitios \u00b7 5 ocasiones de muestreo. ",
-            "Covariables de sitio: ", tags$code("cobertura"), ", ", tags$code("distancia"),
-            ". Sin covariables de observaci\u00f3n. ",
-            "Distribuci\u00f3n real: Poisson con \u03bb ~ exp(0.9 + 0.6\u00b7cobertura \u2212 0.5\u00b7distancia)."
+        "ranas" = list(
+          icono  = "droplet",
+          titulo = "Ranas \u2014 transectos nocturnos",
+          items  = list(
+            list(icon = "grid-3x3",     txt = "60 sitios \u00b7 3 ocasiones"),
+            list(icon = "geo-alt-fill", txt = tagList("Covariables de sitio: ",
+                                                       tags$code("humedad"), ", ",
+                                                       tags$code("vegetacion"))),
+            list(icon = "eye-fill",     txt = tagList("Covariable de observaci\u00f3n: ",
+                                                       tags$code("temp"))),
+            list(icon = "calculator",   txt = tagList("Modelo generador: Poisson con \u03bb ~ ",
+                                                       tags$code("exp(0.7 + 0.9\u00b7humedad + 0.4\u00b7vegetacion)")))
           )
         ),
-        NULL
+        "mallard" = list(
+          icono  = "water",
+          titulo = "Mallard \u2014 patos (K\u00e9ry et al. 2005)",
+          items  = list(
+            list(icon = "grid-3x3",     txt = "239 sitios \u00b7 3 ocasiones"),
+            list(icon = "geo-alt-fill", txt = tagList("Covariables de sitio: ",
+                                                       tags$code("elev"), ", ",
+                                                       tags$code("forest"), ", ",
+                                                       tags$code("length"))),
+            list(icon = "eye-fill",     txt = tagList("Covariables de observaci\u00f3n: ",
+                                                       tags$code("date"), ", ",
+                                                       tags$code("ivel"))),
+            list(icon = "book",         txt = "Dataset de referencia cl\u00e1sico para N-mixture")
+          )
+        )
       )
       if (is.null(desc)) return(NULL)
       div(
-        class = "alert mb-3",
-        style = paste0("background:", colores$fondo, ";",
-                       "border-left: 4px solid ", colores$primario, ";"),
-        bs_icon("info-circle", class = "me-2",
-                style = paste0("color:", colores$primario)),
-        tags$strong(desc$titulo), tags$br(),
-        HTML(as.character(desc$texto))
+        class = "mt-2 p-3",
+        style = paste0("background:", colores$fondo,
+                       "; border-left: 4px solid ", colores$secundario,
+                       "; border-radius: 0 6px 6px 0;"),
+        tags$b(
+          bs_icon(desc$icono, class = "me-1",
+                  style = paste0("color:", colores$secundario)),
+          style = paste0("color:", colores$primario),
+          desc$titulo
+        ),
+        tags$ul(
+          class = "small text-muted mb-0 mt-2",
+          style = "list-style: none; padding-left: 0;",
+          lapply(desc$items, function(item) {
+            tags$li(
+              class = "mb-1",
+              bs_icon(item$icon, class = "me-1",
+                      style = paste0("color:", colores$secundario)),
+              item$txt
+            )
+          })
+        )
       )
     })
 

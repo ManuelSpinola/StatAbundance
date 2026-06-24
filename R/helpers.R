@@ -4,6 +4,17 @@
 # Paleta: Tableau Color Blind (coherente con StatSuite)
 # ============================================================
 
+library(bslib)
+library(bsicons)
+library(shiny)
+library(shinyjs)
+library(ggplot2)
+library(dplyr)
+library(DT)
+library(readr)
+library(readxl)
+library(unmarked)
+
 
 # ── Paleta de colores (idéntica a StatSuite) ───────────────
 colores <- list(
@@ -25,7 +36,7 @@ colores <- list(
 )
 
 # ── Tema visual (idéntico a StatSuite) ─────────────────────
-tema_app <- bs_theme(
+tema_app <- bslib::bs_theme(
   version      = 5,
   bg           = colores$fondo,
   fg           = colores$texto,
@@ -34,11 +45,11 @@ tema_app <- bs_theme(
   success      = colores$exito,
   danger       = colores$peligro,
   warning      = colores$advertencia,
-  base_font    = font_google("Nunito"),
-  heading_font = font_google("Nunito", wght = 700),
+  base_font    = bslib::font_google("Nunito"),
+  heading_font = bslib::font_google("Nunito", wght = 700),
   bootswatch   = NULL
 ) |>
-  bs_add_rules("
+  bslib::bs_add_rules("
   .navbar { background-color: #1170AA !important; }
   .navbar-brand { color: #ffffff !important; display: flex !important;
                   align-items: center !important;

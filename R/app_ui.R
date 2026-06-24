@@ -42,7 +42,7 @@ app_ui <- function() {
           "Modelos de abundancia con estructura espacial expl\u00edcita mediante ",
           "Nearest Neighbour Gaussian Processes (NNGP) e inferencia bayesiana v\u00eda MCMC. ",
           "Soporta modelos de una y m\u00faltiples especies con correlaci\u00f3n espacial ",
-          "entre sitios. Dise\u00f1ado para datasets masivos con m\u00e1s de 100\u000 sitios. ",
+          "entre sitios. Dise\u00f1ado para datasets masivos con m\u00e1s de 100\u202f000 sitios. ",
           "Paquete: spAbundance (Doser et al. 2024)."
         ),
         paquete  = "spAbundance \u2014 Doser et al. (2024)",
